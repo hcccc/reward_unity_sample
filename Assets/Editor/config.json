@@ -1,0 +1,16 @@
+{
+  "frameworks": {
+    "Security.framework": false,
+    "CoreTelephony.framework": false,
+    "AdSupport.framework": true
+  },
+  "url_scheme": "",
+  "tracking_with_scheme": false,
+  "account_info": {
+    "use_sandbox": false,
+    "site_id": "site_id",
+    "site_key": "site_key",
+    "campaign_id": "campaign_id",
+    "advertisement": "advertisement"
+  }
+}

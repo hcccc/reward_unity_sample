@@ -1,0 +1,101 @@
+#!/usr/bin/ruby
+
+# 
+#  Copyright 2014 Glossom, inc. All rights reserved.
+#
+
+require 'json'
+
+CONFIG_FILE = "GreeAdsReward_Account_config.h"
+IMPORT_SENTENCE = "#import \"#{CONFIG_FILE}\"\n" \
+                + "#import \"Libraries/GreeAdsReward.h\""
+FINISH_LAUNCH_SENTENCE ="- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions\n{\n"
+SET_APP_INFO_SENTENCE = "[GreeAdsReward setSiteID:SITE_ID siteKey:SITE_KEY useSandBox:USE_SANDBOX];"
+TRACK_CAMPAIGN_WHEN_LAUNCH_SENTENCE = "[GreeAdsReward sendActionWithCampaignID:CAMPAIGN_ID advertisement:ADVERTISEMENT launchingOptions:launchOptions];"
+TRACK_CAMPAIGN_WHEN_OPEN_SENTENCE = "[GreeAdsReward sendActionWithCampaignID:CAMPAIGN_ID advertisement:ADVERTISEMENT openURL:url];"
+OPEN_URL_SENTENCE = "- (BOOL)application:(UIApplication*)application openURL:(NSURL*)url sourceApplication:(NSString*)sourceApplication annotation:(id)annotation\n{\n"
+INSERT_START = "// --------GreeAdsReward Tracking Start---------"
+INSERT_END = "// --------GreeAdsReward Tracking End---------"
+
+def read_config
+	config_file = File.expand_path('config.json', File.dirname(__FILE__))
+	open(config_file) do |io|
+		data = JSON.load(io)
+		return data
+	end
+end
+Config = read_config
+
+def project_path
+  return ARGV[0]
+end
+
+def set_url_scheme
+  return if Config['url_scheme'].empty?
+  scheme = Config['url_scheme'].split(':')[0]
+	return if scheme.empty?
+  plist_file = File.join(project_path, "Info.plist")
+  set_scheme_command = File.expand_path('set_scheme.py', File.dirname(__FILE__))
+  if scheme != nil
+    system("python #{set_scheme_command} #{plist_file} #{scheme}")
+  end
+end
+
+def format_insert_sentence(prefix, sentences)
+  to_insert = "\n" + prefix + "#{INSERT_START}\n"
+  sentences.each {|sentence|
+    to_insert += prefix + sentence + "\n"
+  }  
+  to_insert += prefix + "#{INSERT_END}\n\n"
+end
+
+def write_config_file
+	account = Config['account_info']
+	content_of_config = <<EOF
+#define SITE_ID @"#{account['site_id']}"
+#define SITE_KEY @"#{account['site_key']}"
+#define USE_SANDBOX #{account['use_sandbox'] ? "YES" : "NO"}
+#define CAMPAIGN_ID @"#{account['campaign_id']}"
+#define ADVERTISEMENT @"#{account['advertisement']}"
+#define URL_SCHEME @"#{account['url_scheme']}"
+EOF
+  config_file_path = File.join(project_path,"Classes", CONFIG_FILE)
+  File.write(config_file_path, content_of_config)
+end
+
+def insert_tracking_code_to_appcontroller
+  appcontroller_path = File.join(project_path,"Classes","UnityAppController.mm")
+  unless File.exist? appcontroller_path
+    puts "can not find UnityAppController.mm file: #{appcontroller_path}"
+    return
+  end
+  
+  #open UnityAppController.mm
+  content = File.read(appcontroller_path, :encoding => Encoding::UTF_8)
+  if content.include?(IMPORT_SENTENCE)
+    puts "already configed"
+  else
+    puts "insert tacking code to UnityAppController.mm"
+    to_insert = format_insert_sentence("", [IMPORT_SENTENCE])
+    content.insert(0, to_insert)
+  
+    #write code to [application: didFinishLaunchingWithOptions:]
+    pos = content.index(FINISH_LAUNCH_SENTENCE)
+    to_insert = format_insert_sentence("\t", [SET_APP_INFO_SENTENCE, TRACK_CAMPAIGN_WHEN_LAUNCH_SENTENCE])
+    content.insert(pos+FINISH_LAUNCH_SENTENCE.length,to_insert) 
+  
+    #write code to [application: openURL: sourceApplication: annotation:]
+    pos = content.index(OPEN_URL_SENTENCE)
+    to_insert = format_insert_sentence("\t",[SET_APP_INFO_SENTENCE, TRACK_CAMPAIGN_WHEN_OPEN_SENTENCE])
+    content.insert(pos+OPEN_URL_SENTENCE.length, to_insert)
+    File.write(appcontroller_path, content)
+  end
+
+end
+
+set_url_scheme
+
+if Config['tracking_with_scheme']
+	write_config_file
+	insert_tracking_code_to_appcontroller
+end
