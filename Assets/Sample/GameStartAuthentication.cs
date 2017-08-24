@@ -19,7 +19,7 @@ public class GameStartAuthentication : MonoBehaviour {
 	[SerializeField]
 	private AccountInfo accountInfoAndroid;
 	private AndroidJavaClass aumlPluginClass;
-	private bool initialSetupDone = false;
+	private static bool initialSetupDone = false;
 
 	AccountInfo info() {
 		#if UNITY_ANDROID
@@ -30,18 +30,21 @@ public class GameStartAuthentication : MonoBehaviour {
 	void Start() {
 		#if UNITY_ANDROID
 		if (!initialSetupDone) {
-			Debug.Log("[START] Start the App");
 			initialSetupDone = true;
 			GreeAdsReward.setAppInfo(this.info().siteId.Trim(), this.info().siteKey.Trim(), this.info().useSandbox);
 			GreeAdsReward.setDevMode(true);
 
-			// Trigger sendAction() call with no identifier specified.
-			GreeAdsReward.sendAction(this.info().campaignID.Trim(), this.info().advertisement.Trim(), this.info().url_scheme.Trim(), null);
+			// Trigger sendAction() call with deviceUniqueIdentifier.
+			string uniqueId = SystemInfo.deviceUniqueIdentifier;
+			GreeAdsReward.sendAction(this.info().campaignID.Trim(), this.info().advertisement.Trim(), this.info().url_scheme.Trim(), uniqueId);
 
 			aumlPluginClass = new AndroidJavaClass ("com.kddi.alml.AlmlLicensePlugin");
 			aumlPluginClass.CallStatic("showDialog", "auマーケットと通信中です");
 
 			bool loginResult = aumlPluginClass.CallStatic<bool>("login");
+			// dismiss default dialog
+			Invoke("dismissAndroidNativeDialog", 2);
+
 			if (!loginResult) {
 				aumlPluginClass.CallStatic("showErrorMsg");
 				StartCoroutine(exitApp());
@@ -71,14 +74,11 @@ public class GameStartAuthentication : MonoBehaviour {
 		if (!loginResult) {
 			aumlPluginClass.CallStatic ("showErrorMsg");
 			StartCoroutine (exitApp ());
-		} else {
-			// Login succesfully, dismiss dialogs
-			Invoke("dismissAndroidNativeDialog", 2);
-		}
+		} 
 	}
 
 	private IEnumerator exitApp() {
-		yield return new WaitForSecondsRealtime(3);
+		yield return new WaitForSecondsRealtime(1);
 		Debug.Log ("Ready to close the app.");
 		Application.Quit ();
 	}
