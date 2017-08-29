@@ -20,6 +20,7 @@ public class GameStartAuthentication : MonoBehaviour {
 	private AccountInfo accountInfoAndroid;
 	private AndroidJavaClass aumlPluginClass;
 	private static bool initialSetupDone = false;
+	private int dialogDismissTime = 4; //secs
 
 	AccountInfo info() {
 		#if UNITY_ANDROID
@@ -31,56 +32,38 @@ public class GameStartAuthentication : MonoBehaviour {
 		#if UNITY_ANDROID
 		if (!initialSetupDone) {
 			initialSetupDone = true;
-			GreeAdsReward.setAppInfo(this.info().siteId.Trim(), this.info().siteKey.Trim(), this.info().useSandbox);
-			GreeAdsReward.setDevMode(true);
-
-			// Trigger sendAction() call with deviceUniqueIdentifier.
-			string uniqueId = SystemInfo.deviceUniqueIdentifier;
-			GreeAdsReward.sendAction(this.info().campaignID.Trim(), this.info().advertisement.Trim(), this.info().url_scheme.Trim(), uniqueId);
-
 			aumlPluginClass = new AndroidJavaClass ("com.kddi.alml.AlmlLicensePlugin");
-			aumlPluginClass.CallStatic("showDialog", "auマーケットと通信中です");
-
-			bool loginResult = aumlPluginClass.CallStatic<bool>("login");
-			// dismiss default dialog
-			Invoke("dismissAndroidNativeDialog", 2);
-
-			if (!loginResult) {
-				aumlPluginClass.CallStatic("showErrorMsg");
-				StartCoroutine(exitApp());
-			} else {
-				StartCoroutine(waitForLoginCallback());
+			bool bindResult = aumlPluginClass.CallStatic<bool>("verifyAuLogin");
+			Debug.Log("Bind Result: " + bindResult);
+			if (!bindResult) {
+				Invoke ("triggerQuit", 3);
 			}
 		}
 		#endif
 	}
 
-	private void dismissAndroidNativeDialog() {
-		aumlPluginClass.CallStatic ("dismissDialog");
+	void onLoginSuccess(string msg) {
+		Debug.Log ("[UnitySendMessage] Login Success: " + msg);
+		performSupershipSDKAction ();
 	}
 
-	private IEnumerator waitForLoginCallback() {
-		bool loginResponse = aumlPluginClass.CallStatic<bool>("checkResponse");
-		int timelimit = 10;
-
-		for (int i = 0; i < timelimit; i++) {
-			if (loginResponse) {
-				break;
-			}
-			yield return new WaitForSecondsRealtime (1);
-			loginResponse = aumlPluginClass.CallStatic<bool>("checkResponse");
-		}
-		bool loginResult = aumlPluginClass.CallStatic<bool>("checkLoginResult");
-		if (!loginResult) {
-			aumlPluginClass.CallStatic ("showErrorMsg");
-			StartCoroutine (exitApp ());
-		} 
+	void onLoginFailure(string msg) {
+		Debug.Log ("[UnitySendMessage] Login Failure: " + msg);
+		Invoke ("triggerQuit", 3);
 	}
 
-	private IEnumerator exitApp() {
-		yield return new WaitForSecondsRealtime(1);
-		Debug.Log ("Ready to close the app.");
+	private void performSupershipSDKAction() {
+		GreeAdsReward.setAppInfo(this.info().siteId.Trim(), this.info().siteKey.Trim(), this.info().useSandbox);
+		GreeAdsReward.setDevMode(true);
+
+		// Trigger sendAction() call with deviceUniqueIdentifier.
+		// string uniqueId = SystemInfo.deviceUniqueIdentifier;
+		int randomId = Random.Range(1, 999999);
+		GreeAdsReward.sendAction(this.info().campaignID.Trim(), this.info().advertisement.Trim(), this.info().url_scheme.Trim(), "identifier" + randomId);
+	}
+
+
+	private void triggerQuit() {
 		Application.Quit ();
 	}
-
 }
